@@ -1,0 +1,61 @@
+[env]
+_.file = ".env"
+_.python.venv = { path = ".venv", create = true }
+
+[tools]
+python = "3.11"
+
+[tasks."setup"]
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ ! -f ".env" ]; then
+  cp .env.example .env
+fi
+
+pip install --quiet -r requirements.txt
+"""
+
+[tasks."hexdump"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd assets
+find . -type f -not -name '*.h' | sed 's|^\./||' | while read -r f; do
+  sym="$(echo "$f" | tr './-' '_')"
+  {
+    echo "const unsigned char ${sym}[] PROGMEM = {"
+    hexdump -v -e '1/1 " 0x%02x,"' "$f" | fold -w 72
+    echo ""
+    echo "};"
+    echo "const unsigned int ${sym}_len = $(wc -c < "$f");"
+  } > "$f.h"
+done
+'''
+
+[tasks."build"]
+depends = ["hexdump"]
+run = "pio run -e esp01_1m"
+
+[tasks."upload"]
+depends = ["hexdump"]
+run = "pio run -e esp01_1m -t upload"
+
+[tasks."monitor"]
+run = "pio device monitor"
+
+[tasks."ota"]
+depends = ["hexdump"]
+run = "pio run -e esp01_1m_ota -t upload"
+
+[tasks."test"]
+run = "pio test -e native"
+
+[tasks."run"]
+depends = [
+  "build",
+  "upload",
+  "monitor",
+]
