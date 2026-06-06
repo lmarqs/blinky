@@ -21,6 +21,7 @@ Everything goes through mise (it loads `.env` and provides the python venv with 
 ## Architecture
 
 - `lib/blink/BlinkController.{h,cpp}` — pure state machine, **no Arduino includes**. The clock is passed into `update(nowMs)`, which makes it host-testable and millis()-rollover-safe (unsigned subtraction idiom). All behavior logic (modes, period clamping 200ms–1h, toggle timing) lives here.
+- `lib/blink/BlinkSetting.{h,cpp}` — pure too: mode↔name mapping (`blinkModeName`/`parseBlinkMode`) and the persisted record (`BlinkSetting` struct, magic/version validation via `applyBlinkSetting`/`blinkSettingFrom`). The EEPROM I/O itself stays in `src/main.cpp`.
 - `src/main.cpp` — device glue only: SoftAP, sync `ESP8266WebServer` routes (`GET /`, `GET /status`, `POST /mode`, `POST /period`), ArduinoOTA, EEPROM persistence (magic/version struct, write-on-change), relay pin driving.
 - `assets/index.html` — the web UI source. The `hexdump` mise task converts every non-`.h` file in `assets/` into a `const ... PROGMEM` byte-array header next to it (e.g. `assets/index.html.h`, symbols `index_html` / `index_html_len`). Generated headers are gitignored; edit the `.html`, never the `.h`. `platformio.ini` adds `-I assets` so `src/main.cpp` includes it directly.
 - `test/test_blink/test_main.cpp` — Unity tests, run only in the `native` env (`test_ignore = *` on embedded envs, `test_build_src = no` on native keeps Arduino-dependent `src/` out of host builds).
