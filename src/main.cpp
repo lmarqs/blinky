@@ -5,21 +5,12 @@
 #include <ESP8266WiFi.h>
 
 #include "BlinkController.h"
+#include "BlinkSetting.h"
 
 // --- Hardware config (carrier boards vary; verify on hardware) ---
 static const uint8_t RELAY_PIN = 0;  // GPIO0 — also a boot strap, see CLAUDE.md
 static const uint8_t RELAY_ACTIVE_LEVEL = HIGH;
 
-// --- Settings persisted to EEPROM (flash-emulated) ---
-struct Settings {
-  uint8_t magic;
-  uint8_t version;
-  uint8_t mode;
-  uint32_t periodMs;
-};
-
-static const uint8_t SETTINGS_MAGIC = 0xB1;
-static const uint8_t SETTINGS_VERSION = 1;
 static const size_t EEPROM_SIZE = 64;
 
 static BlinkController blink_;
@@ -28,9 +19,16 @@ static ESP8266WebServer server(80);
 // Generated from assets/index.html by `mise run hexdump`.
 #include "index.html.h"
 
+// The one place that knows the carrier board's relay polarity.
+static uint8_t relayLevel(bool energized) {
+  if (energized) {
+    return RELAY_ACTIVE_LEVEL;
+  }
+  return RELAY_ACTIVE_LEVEL == HIGH ? LOW : HIGH;
+}
+
 static void applyRelay() {
-  digitalWrite(RELAY_PIN, blink_.output() ? RELAY_ACTIVE_LEVEL
-                                          : (RELAY_ACTIVE_LEVEL == HIGH ? LOW : HIGH));
+  digitalWrite(RELAY_PIN, relayLevel(blink_.output()));
 }
 
 // Advance the state machine and drive the relay on changes.
@@ -40,52 +38,23 @@ static void tick() {
   }
 }
 
-static void loadSettings() {
+static void loadSetting() {
   EEPROM.begin(EEPROM_SIZE);
-  Settings s{};
+  BlinkSetting s{};
   EEPROM.get(0, s);
-  const bool valid = s.magic == SETTINGS_MAGIC && s.version == SETTINGS_VERSION &&
-                     s.mode <= static_cast<uint8_t>(BlinkMode::BLINK);
-  if (valid) {
-    blink_.restore(static_cast<BlinkMode>(s.mode), s.periodMs);
-  }
+  applyBlinkSetting(s, blink_);
 }
 
-static void saveSettings() {
-  Settings s{SETTINGS_MAGIC, SETTINGS_VERSION, static_cast<uint8_t>(blink_.mode()),
-             blink_.period()};
+static void saveSetting() {
+  const BlinkSetting s = blinkSettingFrom(blink_);
   EEPROM.put(0, s);
   EEPROM.commit();
-}
-
-static const char* modeName(BlinkMode mode) {
-  switch (mode) {
-    case BlinkMode::ON:
-      return "on";
-    case BlinkMode::OFF:
-      return "off";
-    default:
-      return "blink";
-  }
-}
-
-static bool parseMode(const String& name, BlinkMode& out) {
-  if (name == "on") {
-    out = BlinkMode::ON;
-  } else if (name == "off") {
-    out = BlinkMode::OFF;
-  } else if (name == "blink") {
-    out = BlinkMode::BLINK;
-  } else {
-    return false;
-  }
-  return true;
 }
 
 static void sendStatus() {
   char body[96];
   snprintf(body, sizeof(body), "{\"mode\":\"%s\",\"period\":%lu,\"output\":%s}",
-           modeName(blink_.mode()), static_cast<unsigned long>(blink_.period()),
+           blinkModeName(blink_.mode()), static_cast<unsigned long>(blink_.period()),
            blink_.output() ? "true" : "false");
   server.send(200, "application/json", body);
 }
@@ -97,14 +66,14 @@ static void handleIndex() {
 
 static void handleMode() {
   BlinkMode mode;
-  if (!parseMode(server.arg("mode"), mode)) {
+  if (!parseBlinkMode(server.arg("mode").c_str(), mode)) {
     server.send(400, "application/json", "{\"error\":\"mode must be blink|on|off\"}");
     return;
   }
   if (mode != blink_.mode()) {
     blink_.setMode(mode);
     tick();
-    saveSettings();
+    saveSetting();
   }
   sendStatus();
 }
@@ -118,7 +87,7 @@ static void handlePeriod() {
   const uint32_t before = blink_.period();
   blink_.setPeriod(static_cast<uint32_t>(requested));
   if (blink_.period() != before) {
-    saveSettings();
+    saveSetting();
   }
   sendStatus();
 }
@@ -126,10 +95,10 @@ static void handlePeriod() {
 void setup() {
   // GPIO0 is a boot strap: claim it and de-energize the relay first thing.
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, RELAY_ACTIVE_LEVEL == HIGH ? LOW : HIGH);
+  digitalWrite(RELAY_PIN, relayLevel(false));
 
   Serial.begin(115200);
-  loadSettings();
+  loadSetting();
 
   WiFi.mode(WIFI_AP);
   WiFi.softAP(BLINKY_AP_SSID, BLINKY_AP_PASSWORD);
