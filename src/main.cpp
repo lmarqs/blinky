@@ -53,7 +53,7 @@ static void saveSetting() {
 
 static void sendStatus() {
   char body[96];
-  snprintf(body, sizeof(body), "{\"mode\":\"%s\",\"period\":%lu,\"output\":%s}",
+  snprintf(body, sizeof(body), "{\"mode\":\"%s\",\"period\":%lu,\"lamp\":%s}",
            blinkModeName(blink_.mode()), static_cast<unsigned long>(blink_.period()),
            blink_.output() ? "true" : "false");
   server.send(200, "application/json", body);

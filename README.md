@@ -26,7 +26,7 @@ installs PlatformIO from `requirements.txt`.
 
 ```sh
 mise run setup     # creates .env from .env.example, installs PlatformIO
-$EDITOR .env       # set real AP/OTA passwords (AP password >= 8 chars)
+$EDITOR .env       # set real Hotspot/OTA passwords (Hotspot password >= 8 chars)
 ```
 
 First flash (wired — ESP-01S socketed in the CH340 adapter):
@@ -37,7 +37,7 @@ mise run monitor   # 115200 baud
 ```
 
 Then socket the chip into the relay carrier and power it at 5V. Every later
-flash can go over the air (join the blinky AP first):
+flash can go over the air (join the blinky Hotspot first):
 
 ```sh
 mise run ota
@@ -54,7 +54,7 @@ mise run ota
 | Endpoint | Method | Params | Returns |
 | --- | --- | --- | --- |
 | `/` | GET | — | Control UI |
-| `/status` | GET | — | `{"mode":"blink","period":5000,"output":false}` |
+| `/status` | GET | — | `{"mode":"blink","period":5000,"lamp":false}` |
 | `/mode` | POST | `mode=blink\|on\|off` | Updated status |
 | `/period` | POST | `period=<ms>` (clamped 200–3600000) | Updated status |
 

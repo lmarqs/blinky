@@ -28,7 +28,7 @@ class BlinkController {
 
   BlinkMode mode() const { return mode_; }
   uint32_t period() const { return periodMs_; }
-  bool output() const { return output_; }  // true = lamp energized
+  bool output() const { return output_; }  // true = active (drives the lamp)
 
   // Advance the state machine; returns true when output() changed.
   // In BLINK mode the first call establishes the timing baseline
