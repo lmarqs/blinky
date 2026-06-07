@@ -42,17 +42,22 @@ static ESP8266WebServer server(80);
 // Drive the carrier outputs — the relay and the LED that mirrors it. Routing
 // both through here keeps the LED in lockstep with the relay.
 static void applyOutput() {
-  const bool on = blink_.output();
+  const bool on = blink_.output().isOn();
   relay.write(on);
   led.write(on);
-  Serial.printf("lamp %s\n", on ? "on" : "off");
 }
 
-// Advance the state machine and drive the outputs on changes.
+// Report the lamp transition over serial — separate from applyOutput so
+// actuation and observability each have a single reason to change.
+static void logLamp() { Serial.printf("lamp %s\n", blink_.output().name()); }
+
+// Advance the state machine; on a real transition, drive the outputs and log it.
 static void tick() {
-  if (blink_.update(millis())) {
-    applyOutput();
+  if (!blink_.update(millis())) {
+    return;
   }
+  applyOutput();
+  logLamp();
 }
 
 static void loadSetting() {
@@ -72,7 +77,7 @@ static void sendStatus() {
   char body[96];
 
   snprintf(body, sizeof(body), "{\"mode\":\"%s\",\"period\":%lu,\"lamp\":%s}", blinkModeName(blink_.mode()),
-           static_cast<unsigned long>(blink_.period()), blink_.output() ? "true" : "false");
+           static_cast<unsigned long>(blink_.period()), blink_.output().isOn() ? "true" : "false");
 
   server.send(200, "application/json", body);
 }
