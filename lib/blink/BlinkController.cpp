@@ -10,9 +10,7 @@ void BlinkController::setMode(BlinkMode mode) {
   started_ = false;
 }
 
-void BlinkController::setPeriod(uint32_t periodMs) {
-  periodMs_ = clampPeriod(periodMs);
-}
+void BlinkController::setPeriod(uint32_t periodMs) { periodMs_ = clampPeriod(periodMs); }
 
 void BlinkController::restore(BlinkMode mode, uint32_t periodMs) {
   mode_ = mode;

@@ -10,29 +10,59 @@ Firmware for an ESP-01S (ESP8266) socketed in a relay carrier board that blinks 
 
 Everything goes through mise (it loads `.env` and provides the python venv with PlatformIO — bare `pio` invocations outside mise will miss the env vars that `platformio.ini` injects via `${sysenv.*}`):
 
-- `mise run setup` — create `.env` from `.env.example`, install PlatformIO into `.venv` from `requirements.txt`
+- `mise run setup` — create `.env` from `.env.example`, install PlatformIO + clang-format into `.venv` from `requirements.txt`
 - `mise run test` — host-native unit tests (`pio test -e native`); single suite: `pio test -e native -f test_blink`
+- `mise run format` — clang-format `-i` over `src/`, `lib/`, `test/` (`.cpp`/`.h`); `mise run format-check` is the read-only `--Werror` variant CI gates on. Style is `.clang-format` (Google base, 120 cols). clang-format is pinned in `requirements.txt` so local and CI agree; `assets/*.h` is generated, so the tasks skip it.
 - `mise run build` — compile firmware (`esp01_1m` env)
 - `mise run upload` — wired flash via CH340 (chip must be **out** of the relay carrier and socketed in the CH340 adapter)
 - `mise run ota` — flash over WiFi via espota to `192.168.4.1`; **the laptop must be joined to the blinky AP**
 - `mise run monitor` — serial monitor at 115200
 - `mise run hexdump` — regenerate C headers from `assets/` web assets (runs automatically before build/upload/ota)
+- `mise run run` — the full first-flash loop: `build`, then wired `upload`, then `monitor`
 
 ## Architecture
 
 - `lib/blink/BlinkController.{h,cpp}` — pure state machine, **no Arduino includes**. The clock is passed into `update(nowMs)`, which makes it host-testable and millis()-rollover-safe (unsigned subtraction idiom). All behavior logic (modes, period clamping 200ms–1h, toggle timing) lives here.
 - `lib/blink/BlinkSetting.{h,cpp}` — pure too: mode↔name mapping (`blinkModeName`/`parseBlinkMode`) and the persisted record (`BlinkSetting` struct, magic/version validation via `applyBlinkSetting`/`blinkSettingFrom`). The EEPROM I/O itself stays in `src/main.cpp`.
+- `lib/blink/BlinkOutput.{h,cpp}` — pure value object for the lamp's on/off state: `isOn()` plus the on/off `name()`. `BlinkController::output()` returns it, keeping the output vocabulary in one host-tested place instead of a bare `bool`.
 - `src/main.cpp` — device glue only: SoftAP, sync `ESP8266WebServer` routes (`GET /`, `GET /status`, `POST /mode`, `POST /period`), ArduinoOTA, EEPROM persistence (magic/version struct, write-on-change), relay pin driving.
 - `assets/index.html` — the web UI source. The `hexdump` mise task converts every non-`.h` file in `assets/` into a `const ... PROGMEM` byte-array header next to it (e.g. `assets/index.html.h`, symbols `index_html` / `index_html_len`). Generated headers are gitignored; edit the `.html`, never the `.h`. `platformio.ini` adds `-I assets` so `src/main.cpp` includes it directly.
-- `test/test_blink/test_main.cpp` — Unity tests, run only in the `native` env (`test_ignore = *` on embedded envs, `test_build_src = no` on native keeps Arduino-dependent `src/` out of host builds).
+- `test/test_*/test_main.cpp` — Unity tests, one suite per `lib/blink` module (`test_blink`, `test_blink_setting`, `test_blink_output`). Run only in the `native` env (`test_ignore = *` on embedded envs, `test_build_src = no` on native keeps Arduino-dependent `src/` out of host builds).
 - Keep this split: anything testable goes in `lib/blink/`, never in `src/main.cpp`.
 
 Two upload envs in `platformio.ini`: `esp01_1m` (wired, esptool) and `esp01_1m_ota` (espota with `--auth`). Secrets (`BLINKY_AP_SSID`, `BLINKY_AP_PASSWORD`, `BLINKY_OTA_PASSWORD`) come from gitignored `.env` as compile-time string defines — the whole build flag is single-quoted (`'-D X="${sysenv.X}"'`), which is required for string defines to survive.
 
 ## Hardware gotchas
 
-- **GPIO0 is both the relay pin and a boot strap** (LOW at reset = flash mode). `setup()` claims the pin and de-energizes the relay first thing. `RELAY_ACTIVE_LEVEL` in `src/main.cpp` is a compile-time constant — carrier boards vary; flip it if the relay logic is inverted on real hardware.
-- Wired flashing requires the chip out of the relay carrier — that's why OTA exists; prefer `mise run ota` after the first flash.
+- **GPIO0 is both the relay pin and a boot strap** (LOW at reset = flash mode). `setup()` claims the pin and de-energizes the relay first thing (`relay.begin()`). Each output is an `Output{pin, activeLevel}` struct in `src/main.cpp`; the relay's `activeLevel` is a compile-time value. **IMPORTANT: carrier boards vary — a wrong `activeLevel` energizes the mains lamp inverted (and at boot). Verify on hardware before flashing; flip it if the relay logic is inverted.**
+- **The onboard blue LED (GPIO2) mirrors the lamp.** It's wired active-LOW on the ESP-01S, so it's declared `led{2, LOW}` in `src/main.cpp` (flip its `activeLevel` like the relay's if your board differs). GPIO2 is also a boot strap (HIGH at reset); "off" leaves it HIGH, so it stays satisfied. Both outputs are driven from one `applyOutput()` off `blink_.output()`, so the LED can't drift out of sync with the relay.
+- **IMPORTANT: wired flashing requires the chip OUT of the relay carrier** (socketed in the CH340 adapter) — flashing in-carrier drives GPIO0/the relay during boot. That's why OTA exists; prefer `mise run ota` after the first flash.
 - The ESP8266 boot ROM prints its reset banner at **74880 baud** (`pio device monitor -b 74880` to read boot diagnostics); the app `Serial` runs at 115200.
 - ESP8266 EEPROM is flash-emulated: `EEPROM.begin(size)` before use and `EEPROM.commit()` to persist are both mandatory; there is no `update()` — write-on-change is implemented in the app code.
 - WPA2 silently degrades if the AP password is under 8 characters; `.env.example` values are intentionally ≥8 so CI builds work.
+
+## Workflow
+
+- For changes that touch pin assignments, boot straps, relay polarity, or the EEPROM record layout, plan the change first (read the relevant Hardware gotchas) before editing — these are destructive to get wrong on real hardware.
+- Keep the split: anything testable goes in `lib/blink/` (pure, no Arduino includes), never in `src/main.cpp`. New behavior gets a `test/test_*` suite alongside it.
+
+## Verification
+
+Run after any change, before considering a task done:
+
+- `mise run format` — formats `.cpp`/`.h`; CI gates on `format-check`, so an unformatted push fails CI.
+- `mise run test` — host-native unit tests for the `lib/blink` modules.
+- `mise run build` — confirms the firmware still compiles for `esp01_1m`.
+
+A change to `lib/blink/` or `src/main.cpp` is not done until format + test + build all pass.
+
+## Deep dive (read on demand)
+
+- [CONTEXT.md](CONTEXT.md) — domain glossary. Use these exact terms in code, comments, and the API: Hotspot (not AP/SoftAP), Lamp (not output/light), Setting (not config), Remote (not client), plus Mode/Period/Relay/Factory Default.
+- [docs/adr/0001-hotspot-only-connectivity.md](docs/adr/0001-hotspot-only-connectivity.md) — why blinky is SoftAP-only (no station mode, hence no NTP/MQTT). Read before touching WiFi/connectivity; changing it reopens this decision.
+
+## Learnings
+
+Living section — when the user corrects a recurring mistake, append the rule here so it isn't repeated.
+
+- _(none yet)_

@@ -53,6 +53,25 @@ run = "pio run -e esp01_1m_ota -t upload"
 [tasks."test"]
 run = "pio test -e native"
 
+[tasks."format"]
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Our C++ lives in src/, lib/, test/. assets/*.h is generated (see hexdump) — skip it.
+find src lib test -type f \\( -name '*.cpp' -o -name '*.h' \\) -print0 |
+  xargs -0 clang-format -i
+"""
+
+[tasks."format-check"]
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+find src lib test -type f \\( -name '*.cpp' -o -name '*.h' \\) -print0 |
+  xargs -0 clang-format --dry-run --Werror
+"""
+
 [tasks."run"]
 depends = [
   "build",

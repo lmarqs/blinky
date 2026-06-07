@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "BlinkOutput.h"
+
 // Lamp behavior. OFF/ON force the output; BLINK toggles it every period.
 enum class BlinkMode : uint8_t {
   OFF = 0,
@@ -28,7 +30,7 @@ class BlinkController {
 
   BlinkMode mode() const { return mode_; }
   uint32_t period() const { return periodMs_; }
-  bool output() const { return output_; }  // true = active (drives the lamp)
+  BlinkOutput output() const { return BlinkOutput{output_}; }  // current lamp state
 
   // Advance the state machine; returns true when output() changed.
   // In BLINK mode the first call establishes the timing baseline
