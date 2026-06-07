@@ -21,6 +21,9 @@ jobs:
       - name: Setup environment
         run: mise run setup
 
+      - name: Check formatting
+        run: mise run format-check
+
       - name: Run unit tests
         run: mise run test
 

@@ -27,13 +27,12 @@ bool parseBlinkMode(const char* name, BlinkMode& out) {
 }
 
 BlinkSetting blinkSettingFrom(const BlinkController& controller) {
-  return BlinkSetting{BlinkSetting::MAGIC, BlinkSetting::VERSION,
-                      static_cast<uint8_t>(controller.mode()), controller.period()};
+  return BlinkSetting{BlinkSetting::MAGIC, BlinkSetting::VERSION, static_cast<uint8_t>(controller.mode()),
+                      controller.period()};
 }
 
 bool applyBlinkSetting(const BlinkSetting& setting, BlinkController& controller) {
-  const bool valid = setting.magic == BlinkSetting::MAGIC &&
-                     setting.version == BlinkSetting::VERSION &&
+  const bool valid = setting.magic == BlinkSetting::MAGIC && setting.version == BlinkSetting::VERSION &&
                      setting.mode <= static_cast<uint8_t>(BlinkMode::BLINK);
   if (!valid) {
     return false;
