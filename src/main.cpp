@@ -17,6 +17,7 @@ using HttpServer = WebServer;
 
 #include "BlinkController.h"
 #include "BlinkSetting.h"
+#include "SettingUpdate.h"
 
 // --- Hardware config (carrier boards vary; verify on hardware) ---
 
@@ -97,10 +98,7 @@ static void saveSetting() {
 
 static void sendStatus() {
   char body[96];
-
-  snprintf(body, sizeof(body), "{\"mode\":\"%s\",\"period\":%lu,\"lamp\":%s}", blinkModeName(blink_.mode()),
-           static_cast<unsigned long>(blink_.period()), blink_.output().isOn() ? "true" : "false");
-
+  statusJson(blink_, body, sizeof(body));
   server.send(200, "application/json", body);
 }
 
@@ -108,40 +106,35 @@ static void handleIndex() {
   server.send_P(200, "text/html", reinterpret_cast<const char*>(index_html), index_html_len);
 }
 
-static void handleMode() {
-  BlinkMode mode;
-
-  if (!parseBlinkMode(server.arg("mode").c_str(), mode)) {
-    server.send(400, "application/json", "{\"error\":\"mode must be blink|on|off\"}");
-    return;
-  }
-
-  if (mode != blink_.mode()) {
-    blink_.setMode(mode);
-    tick();
-    saveSetting();
+// One response policy for every command route. Rejected: send the route's 400
+// error. Accepted (the Setting changed): drive the outputs to the new lamp
+// state, log it, and persist (write-on-change). Unchanged: do neither. Every
+// non-rejected request ends by reporting the current status.
+static void respondToCommand(Outcome outcome, const char* errorBody) {
+  switch (outcome) {
+    case Outcome::Rejected:
+      server.send(400, "application/json", errorBody);
+      return;
+    case Outcome::Accepted:
+      applyOutput();
+      logLamp();
+      saveSetting();
+      break;
+    case Outcome::Unchanged:
+      break;
   }
 
   sendStatus();
 }
 
+static void handleMode() {
+  respondToCommand(applyMode(blink_, server.arg("mode").c_str(), millis()),
+                   "{\"error\":\"mode must be blink|on|off\"}");
+}
+
 static void handlePeriod() {
-  const long requested = server.arg("period").toInt();
-
-  if (requested <= 0) {
-    server.send(400, "application/json", "{\"error\":\"period must be a positive integer\"}");
-    return;
-  }
-
-  const uint32_t before = blink_.period();
-
-  blink_.setPeriod(static_cast<uint32_t>(requested));
-
-  if (blink_.period() != before) {
-    saveSetting();
-  }
-
-  sendStatus();
+  respondToCommand(applyPeriod(blink_, server.arg("period").c_str(), millis()),
+                   "{\"error\":\"period must be a positive integer\"}");
 }
 
 void setup() {
