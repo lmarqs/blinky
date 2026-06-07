@@ -17,7 +17,7 @@ using HttpServer = WebServer;
 
 #include "BlinkController.h"
 #include "BlinkSetting.h"
-#include "SettingUpdate.h"
+#include "BlinkSettingUpdate.h"
 
 // --- Hardware config (carrier boards vary; verify on hardware) ---
 
@@ -110,17 +110,17 @@ static void handleIndex() {
 // error. Accepted (the Setting changed): drive the outputs to the new lamp
 // state, log it, and persist (write-on-change). Unchanged: do neither. Every
 // non-rejected request ends by reporting the current status.
-static void respondToCommand(Outcome outcome, const char* errorBody) {
+static void respondToCommand(BlinkOutcome outcome, const char* errorBody) {
   switch (outcome) {
-    case Outcome::Rejected:
+    case BlinkOutcome::Rejected:
       server.send(400, "application/json", errorBody);
       return;
-    case Outcome::Accepted:
+    case BlinkOutcome::Accepted:
       applyOutput();
       logLamp();
       saveSetting();
       break;
-    case Outcome::Unchanged:
+    case BlinkOutcome::Unchanged:
       break;
   }
 

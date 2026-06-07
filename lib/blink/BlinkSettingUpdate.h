@@ -14,17 +14,17 @@
 // The result of applying a request. Accepted means the Setting changed and
 // should be persisted + actuated; Unchanged means the request was valid but a
 // no-op; Rejected means the request was malformed and nothing was applied.
-enum class Outcome { Accepted, Rejected, Unchanged };
+enum class BlinkOutcome { Accepted, Rejected, Unchanged };
 
 // Apply a mode request. arg is the raw name ("blink"|"on"|"off"). On Accepted
 // the controller is advanced (update(now)), so output() and statusJson() are
 // current before the caller actuates.
-Outcome applyMode(BlinkController& controller, const char* arg, uint32_t now);
+BlinkOutcome applyMode(BlinkController& controller, const char* arg, uint32_t now);
 
 // Apply a period request. arg is the raw string; it must be a positive integer
 // (no trailing garbage). The value is clamped by the controller, so a valid but
 // out-of-range request still Accepts at the clamped period.
-Outcome applyPeriod(BlinkController& controller, const char* arg, uint32_t now);
+BlinkOutcome applyPeriod(BlinkController& controller, const char* arg, uint32_t now);
 
 // Serialize the current Setting + lamp as the status JSON, writing up to n bytes.
 void statusJson(const BlinkController& controller, char* buf, size_t n);
