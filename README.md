@@ -47,7 +47,7 @@ mise run ota:esp01
 
 ## Usage
 
-1. Join the `blinky` WiFi network (password from your `.env`).
+1. Join the `blinky` Hotspot (password from your `.env`).
 2. Open <http://192.168.4.1>.
 3. Pick a mode, tune the period.
 
@@ -59,6 +59,9 @@ mise run ota:esp01
 | `/status` | GET | — | `{"mode":"blink","period":5000,"lamp":false}` |
 | `/mode` | POST | `mode=blink\|on\|off` | Updated status |
 | `/period` | POST | `period=<ms>` (clamped 200–3600000) | Updated status |
+
+Invalid input is rejected with `400 {"error":"…"}` (unknown `mode`, or a
+non-positive `period`); any other path returns `404 not found`.
 
 ## Development
 
@@ -83,3 +86,10 @@ the firmware serves.
 
 CI builds and tests every push to `main`, then publishes the firmware binary
 as a `build-<sha>` release.
+
+## Project docs
+
+- [CONTEXT.md](CONTEXT.md) — the domain glossary (Hotspot, Lamp, Setting, Mode,
+  Period, Relay…). Use these terms when contributing.
+- [docs/adr/0001-hotspot-only-connectivity.md](docs/adr/0001-hotspot-only-connectivity.md)
+  — why blinky is hotspot-only (no station mode, hence no NTP/MQTT).
