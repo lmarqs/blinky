@@ -43,7 +43,7 @@ struct Output {
 #if defined(ESP8266)
 // ESP-01S: GPIO0 = relay + boot strap (LOW at reset = flash mode). GPIO2 =
 // onboard blue LED that mirrors the lamp, wired active-LOW.
-static const Output relay{0, HIGH};
+static const Output relay{0, LOW};
 static const Output led{2, LOW};
 #elif defined(ESP32)
 // ESP32 DevKit (WROOM-32): relay on GPIO23 — a plain output that stays LOW at
