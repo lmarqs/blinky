@@ -35,20 +35,35 @@ find . -type f -not -name '*.h' | sed 's|^\./||' | while read -r f; do
 done
 '''
 
-[tasks."build"]
+# Tasks are namespaced by board: <action>:<board>. The ESP-01S is the primary
+# board; the ESP32 DevKit flashes over its onboard USB-serial, so it skips the
+# carrier/chip-removal dance the ESP-01S needs.
+[tasks."build:esp01"]
 depends = ["hexdump"]
 run = "pio run -e esp01_1m"
 
-[tasks."upload"]
+[tasks."upload:esp01"]
 depends = ["hexdump"]
 run = "pio run -e esp01_1m -t upload"
 
-[tasks."monitor"]
-run = "pio device monitor"
-
-[tasks."ota"]
+[tasks."ota:esp01"]
 depends = ["hexdump"]
 run = "pio run -e esp01_1m_ota -t upload"
+
+[tasks."build:esp32"]
+depends = ["hexdump"]
+run = "pio run -e esp32dev"
+
+[tasks."upload:esp32"]
+depends = ["hexdump"]
+run = "pio run -e esp32dev -t upload"
+
+[tasks."ota:esp32"]
+depends = ["hexdump"]
+run = "pio run -e esp32dev_ota -t upload"
+
+[tasks."monitor"]
+run = "pio device monitor"
 
 [tasks."test"]
 run = "pio test -e native"
@@ -74,7 +89,7 @@ find src lib test -type f \\( -name '*.cpp' -o -name '*.h' \\) -print0 |
 
 [tasks."run"]
 depends = [
-  "build",
-  "upload",
+  "build:esp01",
+  "upload:esp01",
   "monitor",
 ]

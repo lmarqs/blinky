@@ -1,8 +1,19 @@
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <EEPROM.h>
+
+// The web server and WiFi headers differ by chip; alias both to HttpServer so
+// the route handlers below stay platform-agnostic. The rest of the API
+// (EEPROM, WiFi.softAP, ArduinoOTA, send_P) is identical across both cores.
+#if defined(ESP8266)
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
+using HttpServer = ESP8266WebServer;
+#elif defined(ESP32)
+#include <WebServer.h>
+#include <WiFi.h>
+using HttpServer = WebServer;
+#endif
 
 #include "BlinkController.h"
 #include "BlinkSetting.h"
@@ -19,22 +30,33 @@ struct Output {
 
   void begin() const {
     pinMode(pin, OUTPUT);
-    write(false);  // off (HIGH for active-LOW GPIO2, which the boot strap wants)
+    write(false);  // off first thing; write() derives the off-level from activeLevel,
+                   // so a boot-strap pin (e.g. active-LOW GPIO2) lands in its safe state
   }
 
   void write(bool on) const { digitalWrite(pin, on ? activeLevel : (activeLevel == HIGH ? LOW : HIGH)); }
 };
 
-// GPIO0: relay + boot strap (LOW at reset = flash mode). GPIO2: onboard blue
-// LED that mirrors the lamp, wired active-LOW. Flip an activeLevel if your
-// carrier inverts it.
+// Pin map differs by board; the lamp logic (BlinkController) does not. Flip an
+// activeLevel if your carrier/board inverts it.
+#if defined(ESP8266)
+// ESP-01S: GPIO0 = relay + boot strap (LOW at reset = flash mode). GPIO2 =
+// onboard blue LED that mirrors the lamp, wired active-LOW.
 static const Output relay{0, HIGH};
 static const Output led{2, LOW};
+#elif defined(ESP32)
+// ESP32 DevKit (WROOM-32): relay on GPIO23 — a plain output that stays LOW at
+// boot, so it won't drive the relay during reset/flash. Avoid the strapping
+// pins GPIO0/2/12/15. GPIO2 here is the onboard LED, active-HIGH on the DevKit
+// (the opposite polarity to the ESP-01S).
+static const Output relay{23, HIGH};
+static const Output led{2, HIGH};
+#endif
 
 static const size_t EEPROM_SIZE = 64;
 
 static BlinkController blink_;
-static ESP8266WebServer server(80);
+static HttpServer server(80);
 
 // Generated from assets/index.html by `mise run hexdump`.
 #include "index.html.h"
